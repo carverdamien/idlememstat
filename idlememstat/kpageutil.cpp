@@ -1,4 +1,5 @@
 #include <Python.h>
+#include <stdlib.h>
 
 #include <fstream>
 #include <string>
@@ -8,10 +9,35 @@
 
 #include <linux/kernel-page-flags.h>
 
-#define KPAGEFLAGS_PATH		"/proc/kpageflags"
-#define KPAGECGROUP_PATH	"/proc/kpagecgroup"
-#define KPAGEIDLE_PATH		"/sys/kernel/mm/page_idle/bitmap"
+#define DEFAULT_KPAGEFLAGS_PATH		"/proc/kpageflags"
+#define DEFAULT_KPAGECGROUP_PATH	"/proc/kpagecgroup"
+#define DEFAULT_KPAGEIDLE_PATH		"/sys/kernel/mm/page_idle/bitmap"
 
+#define KPAGEFLAGS_PATH kpageflags_path()
+#define KPAGECGROUP_PATH kpagecgroup_path()
+#define KPAGEIDLE_PATH kpageidle_path()
+
+const char* kpageflags_path(void) {
+	const char* pPath = getenv ("KPAGEFLAGS_PATH");
+	if (pPath!=NULL)
+		return pPath;
+	return DEFAULT_KPAGEFLAGS_PATH;
+}
+
+const char* kpagecgroup_path(void) {
+	char* pPath = getenv ("KPAGECGROUP_PATH");
+	if (pPath!=NULL)
+		return pPath;
+	return DEFAULT_KPAGECGROUP_PATH;
+}
+
+const char* kpageidle_path(void) {
+	char* pPath = getenv ("KPAGEIDLE_PATH");
+	if (pPath!=NULL)
+		return pPath;
+	return DEFAULT_KPAGEIDLE_PATH;
+}
+	
 // must be multiple of 64 for the sake of kpageidle
 #define KPAGE_BATCH		1024
 

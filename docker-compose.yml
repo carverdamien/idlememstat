@@ -1,0 +1,17 @@
+version: "2.0"
+services:
+  idlememstat:
+    build: .
+    privileged: true
+    environment:
+      - KPAGEFLAGS_PATH=/host/proc/kpageflags
+      - KPAGECGROUP_PATH=/host/proc/kpagecgroup
+      - KPAGEIDLE_PATH=/host/sys/kernel/mm/page_idle/bitmap
+      - MEMCG_ROOT_PATH=/host/sys/fs/cgroup/memory
+      - ZONE_INFO_PATH=/host/proc/zoneinfo
+    volumes:
+      - /proc/zoneinfo:/host/proc/zoneinfo
+      - /proc/kpageflags:/host/proc/kpageflags
+      - /proc/kpagecgroup:/host/proc/kpagecgroup
+      - /sys/kernel/mm/page_idle/bitmap:/host/sys/kernel/mm/page_idle/bitmap
+      - /sys/fs/cgroup/memory:/host/sys/fs/cgroup/memory

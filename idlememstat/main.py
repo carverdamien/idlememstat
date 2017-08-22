@@ -10,12 +10,19 @@ import time
 import kpageutil
 
 MEMCG_ROOT_PATH = "/sys/fs/cgroup/memory"
+if 'MEMCG_ROOT_PATH' in os.environ:
+    MEMCG_ROOT_PATH = os.environ['MEMCG_ROOT_PATH']
+
+ZONE_INFO_PATH = "/proc/zoneinfo"
+if 'ZONE_INFO_PATH' in os.environ:
+    ZONE_INFO_PATH = os.environ['ZONE_INFO_PATH']
+
 DEFAULT_DELAY = 300  # seconds
 
 
 def _get_end_pfn():
     end_pfn = 0
-    with open('/proc/zoneinfo', 'r') as f:
+    with open(ZONE_INFO_PATH, 'r') as f:
         for l in f.readlines():
             l = l.split()
             if l[0] == 'spanned':
