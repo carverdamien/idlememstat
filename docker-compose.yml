@@ -3,6 +3,7 @@ services:
   idlememstat:
     build: .
     privileged: true
+    command: [ "-d", "1", "--use-docker" ]
     environment:
       - KPAGEFLAGS_PATH=/host/proc/kpageflags
       - KPAGECGROUP_PATH=/host/proc/kpagecgroup
@@ -10,6 +11,7 @@ services:
       - MEMCG_ROOT_PATH=/host/sys/fs/cgroup/memory
       - ZONE_INFO_PATH=/host/proc/zoneinfo
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
       - /proc/zoneinfo:/host/proc/zoneinfo
       - /proc/kpageflags:/host/proc/kpageflags
       - /proc/kpagecgroup:/host/proc/kpagecgroup

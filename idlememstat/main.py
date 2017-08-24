@@ -6,6 +6,7 @@ import stat
 import sys
 import threading
 import time
+import docker
 
 import kpageutil
 
@@ -149,7 +150,6 @@ def print_idlemem_info_hdr():
     print "%-20s%10s%10s%10s%10s%10s%10s" % \
         ('cgroup', 'total', 'idle', "anon", "anon_idle", "file", "file_idle")
 
-
 def print_idlemem_info(idlemem_tracker):
     for dir, subdirs, files in os.walk(MEMCG_ROOT_PATH):
         ino = os.stat(dir)[stat.ST_INO]
@@ -162,6 +162,24 @@ def print_idlemem_info(idlemem_tracker):
              total[0] / 1024, idle[0] / 1024,
              total[1] / 1024, idle[1] / 1024)
 
+def print_docker_idlemem_info_hdr():
+    print "%-20s%10s%10s%10s%10s%10s%10s" % \
+        ('container', 'total', 'idle', "anon", "anon_idle", "file", "file_idle")
+
+def print_docker_idlemem_info(idlemem_tracker):
+    containers = [c['Id'] for c in docker.client.Client().containers()]
+    for dir, subdirs, files in os.walk(MEMCG_ROOT_PATH):
+        ino = os.stat(dir)[stat.ST_INO]
+        idle = idlemem_tracker.get_idle_size(ino)
+        total = get_memcg_usage(dir)
+        cid = dir.replace(MEMCG_ROOT_PATH, '', 1).split('/')[-1]
+        if cid not in containers: continue
+        print "%-20s%10d%10d%10d%10d%10d%10d" % \
+            (cid,
+             (total[0] + total[1]) / 1024,
+             (idle[0] + idle[1]) / 1024,
+             total[0] / 1024, idle[0] / 1024,
+             total[1] / 1024, idle[1] / 1024)
 
 def _sighandler(signum, frame):
     global _shutdown_request
@@ -169,26 +187,24 @@ def _sighandler(signum, frame):
 
 
 def main():
-    parser = optparse.OptionParser("Usage: %prog [delay]")
+    parser = optparse.OptionParser()
+    parser.add_option("-d", dest="delay", default=DEFAULT_DELAY, type=int)
+    parser.add_option("--use-docker", dest="docker", default=False, action="store_true")
     (options, args) = parser.parse_args()
-    if len(args) == 1:
-        try:
-            delay = max(int(args[0]), 0)
-        except ValueError:
-            parser.error("delay must be an integer")
-    elif args:
-        parser.error("incorrect number of arguments")
-    else:
-        delay = DEFAULT_DELAY
 
     global _shutdown_request
     _shutdown_request = False
     signal.signal(signal.SIGINT, _sighandler)
     signal.signal(signal.SIGTERM, _sighandler)
 
-    print_idlemem_info_hdr()
+    if options.docker:
+        print_docker_idlemem_info_hdr()
+        on_update = print_docker_idlemem_info
+    else:
+        print_idlemem_info_hdr()
+        on_update = print_idlemem_info
 
-    idlemem_tracker = IdleMemTracker(delay, print_idlemem_info)
+    idlemem_tracker = IdleMemTracker(options.delay, on_update)
     t = threading.Thread(target=idlemem_tracker.serve_forever)
     t.start()
 
