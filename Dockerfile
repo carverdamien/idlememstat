@@ -17,4 +17,4 @@ ENV KPAGEFLAGS_PATH=/proc/kpageflags \
     KPAGEIDLE_PATH=/sys/kernel/mm/page_idle/bitmap \
     MEMCG_ROOT_PATH=/sys/fs/cgroup/memory \
     ZONE_INFO_PATH=/proc/zoneinfo
-CMD [ "-d", "1" ]
+CMD [ "-d", "1", "--cgroup" ]

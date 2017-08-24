@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 import docker
+import pymongo
 
 import kpageutil
 
@@ -150,13 +151,18 @@ def print_idlemem_info_hdr():
     print "%-20s%10s%10s%10s%10s%10s%10s" % \
         ('cgroup', 'total', 'idle', "anon", "anon_idle", "file", "file_idle")
 
-def print_idlemem_info(idlemem_tracker):
+def idlemem_info(idlemem_tracker):
     for dir, subdirs, files in os.walk(MEMCG_ROOT_PATH):
         ino = os.stat(dir)[stat.ST_INO]
         idle = idlemem_tracker.get_idle_size(ino)
         total = get_memcg_usage(dir)
+        cgroup = dir.replace(MEMCG_ROOT_PATH, '', 1) or '/'
+        yield (cgroup, total, idle)
+
+def print_idlemem_info(idlemem_tracker):
+    for cgroup, total, idle in idlemem_info(idlemem_tracker):
         print "%-20s%10d%10d%10d%10d%10d%10d" % \
-            (dir.replace(MEMCG_ROOT_PATH, '', 1) or '/',
+            (cgroup,
              (total[0] + total[1]) / 1024,
              (idle[0] + idle[1]) / 1024,
              total[0] / 1024, idle[0] / 1024,
@@ -168,11 +174,8 @@ def print_docker_idlemem_info_hdr():
 
 def print_docker_idlemem_info(idlemem_tracker):
     containers = [c['Id'] for c in docker.client.Client().containers()]
-    for dir, subdirs, files in os.walk(MEMCG_ROOT_PATH):
-        ino = os.stat(dir)[stat.ST_INO]
-        idle = idlemem_tracker.get_idle_size(ino)
-        total = get_memcg_usage(dir)
-        cid = dir.replace(MEMCG_ROOT_PATH, '', 1).split('/')[-1]
+    for cgroup, total, idle in idlemem_info(idlemem_tracker):
+        cid = cgroup.split('/')[-1]
         if cid not in containers: continue
         print "%-20s%10d%10d%10d%10d%10d%10d" % \
             (cid,
@@ -181,15 +184,37 @@ def print_docker_idlemem_info(idlemem_tracker):
              total[0] / 1024, idle[0] / 1024,
              total[1] / 1024, idle[1] / 1024)
 
+def idlemem_info_records(idlemem_tracker):
+    def to_record(read, cgroup, to_record, idle):
+        return {
+            'read' : read,
+            'cgroup' : cgroup,
+            'Id' : cgroup.split('/')[-1],
+            'memory_stats' : {
+                'total' : total[0] + total[1],
+                'stats' : {
+                    'idle_anon' : idle[0],
+                    'idle_file' : idle[1],
+                    'anon' : total[0],
+                    'file' : total[1],
+                }
+            }
+        }
+    read = time.strftime("%Y-%m-%dT%H:%M:%S") # FIX ME: should come from kpageutil.ccp
+    return [to_record(read, cgroup, total, idle)
+            for cgroup, total, idle in idlemem_info(idlemem_tracker)]
+
 def _sighandler(signum, frame):
     global _shutdown_request
     _shutdown_request = True
 
-
 def main():
     parser = optparse.OptionParser()
     parser.add_option("-d", dest="delay", default=DEFAULT_DELAY, type=int)
-    parser.add_option("--use-docker", dest="docker", default=False, action="store_true")
+    parser.add_option("--cgroup", dest="cgroup", default=False, action="store_true")
+    parser.add_option("--docker", dest="docker", default=False, action="store_true")
+    parser.add_option("--mongo", dest="mongo", default=False, action="store_true")
+    parser.add_option('--dbname', dest="dbname", type=str, nargs='?', default='prod')
     (options, args) = parser.parse_args()
 
     global _shutdown_request
@@ -197,12 +222,26 @@ def main():
     signal.signal(signal.SIGINT, _sighandler)
     signal.signal(signal.SIGTERM, _sighandler)
 
+    on_update_callbacks = []
+
+    def on_update(idlemem_tracker):
+        for c in on_update_callbacks:
+            c(idlemem_tracker)
+
     if options.docker:
         print_docker_idlemem_info_hdr()
-        on_update = print_docker_idlemem_info
-    else:
+        on_update_callbacks.append(print_docker_idlemem_info)
+
+    if options.cgroup:
         print_idlemem_info_hdr()
-        on_update = print_idlemem_info
+        on_update_callbacks.append(print_idlemem_info)
+
+    if options.mongo:
+        def mongo_idlemem_info(idlemem_tracker):
+            with pymongo.MongoClient() as client:
+                db = client[options.dbname]
+                db.dockerstats.insert_many(idlemem_info_records(idlemem_tracker))
+        on_update_callbacks.append(mongo_idlemem_info)
 
     idlemem_tracker = IdleMemTracker(options.delay, on_update)
     t = threading.Thread(target=idlemem_tracker.serve_forever)

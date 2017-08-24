@@ -1,9 +1,12 @@
 version: "2.0"
 services:
+  mongo:
+    image: mongo
   idlememstat:
     build: .
     privileged: true
-    command: [ "-d", "1", "--use-docker" ]
+    command: [ "-d", "1", "--docker", "--mongo" ]
+    network_mode: "service:mongo"
     environment:
       - KPAGEFLAGS_PATH=/host/proc/kpageflags
       - KPAGECGROUP_PATH=/host/proc/kpagecgroup
